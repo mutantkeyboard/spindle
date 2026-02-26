@@ -1,5 +1,7 @@
 # Spindle
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/mutantkeyboard/spindle.svg)](https://pkg.go.dev/github.com/mutantkeyboard/spindle)
+
 Pagination middleware for [Fiber](https://github.com/gofiber/fiber) v3.
 
 Spindle extracts `page`, `limit`, `offset`, and `sort` parameters from query strings and makes them available to your handlers via context.
@@ -119,6 +121,10 @@ type PageInfo struct {
 - Page values below 1 are reset to 1
 - Negative offsets are reset to 0
 - Sort fields are validated against `AllowedSorts`
+
+## Acknowledgements
+
+Heavily inspired by [fiberpaginate](https://github.com/garrettladley/fiberpaginate) by Garrett Ladley.
 
 ## License
 
