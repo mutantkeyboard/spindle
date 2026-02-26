@@ -408,6 +408,32 @@ func Test_PaginateFromContextWithoutNew(t *testing.T) {
 	}
 }
 
+func Test_PaginateNextSkip(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		Next: func(c fiber.Ctx) bool {
+			return true
+		},
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		_, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(nil)
+	})
+
+	resp, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("status = %d, want %d (middleware should be skipped)", resp.StatusCode, fiber.StatusBadRequest)
+	}
+}
+
 func Test_PaginateEdgeCases(t *testing.T) {
 	t.Parallel()
 	app := fiber.New()
@@ -434,6 +460,7 @@ func Test_PaginateEdgeCases(t *testing.T) {
 		{"Page zero", "/?page=0", 1, 10},
 		{"Negative limit", "/?limit=-10", 1, 10},
 		{"Limit zero", "/?limit=0", 1, 10},
+		{"Limit exceeds max", "/?limit=200", 1, MaxLimit},
 	}
 
 	for _, tc := range testCases {
