@@ -1,4 +1,7 @@
-.PHONY: test lint vet fmt check docker-test docker-build clean
+.PHONY: test lint vet fmt check docker-test docker-build clean help
+
+BIN := $(CURDIR)/bin
+GOLANGCI_LINT := $(BIN)/golangci-lint
 
 ## Testing
 
@@ -14,8 +17,12 @@ bench: ## Run benchmarks
 
 ## Code quality
 
-lint: ## Run golangci-lint
-	golangci-lint run
+$(GOLANGCI_LINT):
+	@mkdir -p $(BIN)
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(BIN)
+
+lint: $(GOLANGCI_LINT) ## Run golangci-lint (downloads to ./bin if missing)
+	$(GOLANGCI_LINT) run
 
 fmt: ## Format code
 	gofmt -w .
