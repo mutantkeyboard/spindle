@@ -26,10 +26,7 @@ func New(config ...Config) fiber.Handler {
 			return c.Next()
 		}
 
-		page := fiber.Query(c, cfg.PageKey, cfg.DefaultPage)
-		if page < 1 {
-			page = 1
-		}
+		page := max(fiber.Query(c, cfg.PageKey, cfg.DefaultPage), 1)
 
 		limit := fiber.Query(c, cfg.LimitKey, cfg.DefaultLimit)
 		if limit < 1 {
@@ -39,10 +36,7 @@ func New(config ...Config) fiber.Handler {
 			limit = MaxLimit
 		}
 
-		offset := fiber.Query(c, "offset", 0)
-		if offset < 0 {
-			offset = 0
-		}
+		offset := max(fiber.Query(c, "offset", 0), 0)
 
 		sorts := parseSortQuery(c.Query(cfg.SortKey), cfg.AllowedSorts, cfg.DefaultSort)
 
