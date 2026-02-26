@@ -2,7 +2,6 @@ package spindle
 
 import (
 	"encoding/json"
-	"io"
 	"net/http/httptest"
 	"reflect"
 	"testing"
@@ -53,16 +52,10 @@ func Test_PaginateWithQueries(t *testing.T) {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, fiber.StatusOK)
 	}
 
-	body := resp.Body
-	defer body.Close()
-
-	bodyBytes, err := io.ReadAll(body)
-	if err != nil {
-		t.Fatal(err)
-	}
+	defer resp.Body.Close() //nolint:errcheck
 
 	var respBody Response
-	if err := json.Unmarshal(bodyBytes, &respBody); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
 		t.Fatal(err)
 	}
 

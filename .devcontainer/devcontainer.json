@@ -1,0 +1,17 @@
+{
+  "name": "Spindle Dev",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint"
+      }
+    }
+  },
+  "postCreateCommand": "go mod download"
+}

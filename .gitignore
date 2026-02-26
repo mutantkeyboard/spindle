@@ -1,1 +1,4 @@
 docs/
+bin/
+coverage.out
+dist/
