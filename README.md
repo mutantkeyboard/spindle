@@ -87,7 +87,7 @@ app.Use(spindle.New(spindle.Config{
 ## Config
 
 | Property | Type | Description | Default |
-|----------|------|-------------|---------|
+| -------- | ---- | ----------- | ------- |
 | Next | `func(c fiber.Ctx) bool` | Skip middleware when returns true | `nil` |
 | PageKey | `string` | Query key for page number | `"page"` |
 | DefaultPage | `int` | Default page number | `1` |
