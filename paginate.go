@@ -1,6 +1,8 @@
 package spindle
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -26,8 +28,6 @@ func New(config ...Config) fiber.Handler {
 			return c.Next()
 		}
 
-		page := max(fiber.Query(c, cfg.PageKey, cfg.DefaultPage), 1)
-
 		limit := fiber.Query(c, cfg.LimitKey, cfg.DefaultLimit)
 		if limit < 1 {
 			limit = cfg.DefaultLimit
@@ -36,12 +36,36 @@ func New(config ...Config) fiber.Handler {
 			limit = MaxLimit
 		}
 
-		offset := max(fiber.Query(c, "offset", 0), 0)
-
 		sorts := parseSortQuery(c.Query(cfg.SortKey), cfg.AllowedSorts, cfg.DefaultSort)
 
-		c.Locals(pageInfoKey, NewPageInfo(page, limit, offset, sorts))
+		cursorRaw := c.Query(cfg.CursorKey)
+		if cursorRaw == "" && cfg.CursorParam != "" {
+			cursorRaw = c.Query(cfg.CursorParam)
+		}
 
+		if cursorRaw != "" {
+			data, err := base64.RawURLEncoding.DecodeString(cursorRaw)
+			if err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid cursor"})
+			}
+			var obj map[string]any
+			if err := json.Unmarshal(data, &obj); err != nil {
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid cursor"})
+			}
+
+			pageInfo := &PageInfo{
+				Limit:  limit,
+				Sort:   sorts,
+				Cursor: cursorRaw,
+			}
+			c.Locals(pageInfoKey, pageInfo)
+			return c.Next()
+		}
+
+		page := max(fiber.Query(c, cfg.PageKey, cfg.DefaultPage), 1)
+		offset := max(fiber.Query(c, "offset", 0), 0)
+
+		c.Locals(pageInfoKey, NewPageInfo(page, limit, offset, sorts))
 		return c.Next()
 	}
 }
