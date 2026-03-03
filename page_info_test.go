@@ -99,6 +99,26 @@ func TestPageInfoNextPageURL(t *testing.T) {
 	}
 }
 
+func TestPageInfoCursorFields(t *testing.T) {
+	t.Parallel()
+
+	p := &PageInfo{
+		Cursor:     "abc123",
+		HasMore:    true,
+		NextCursor: "def456",
+	}
+
+	if p.Cursor != "abc123" {
+		t.Errorf("Cursor = %q, want %q", p.Cursor, "abc123")
+	}
+	if !p.HasMore {
+		t.Error("HasMore = false, want true")
+	}
+	if p.NextCursor != "def456" {
+		t.Errorf("NextCursor = %q, want %q", p.NextCursor, "def456")
+	}
+}
+
 func TestPageInfoPreviousPageURL(t *testing.T) {
 	t.Parallel()
 

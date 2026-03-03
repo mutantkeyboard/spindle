@@ -33,7 +33,10 @@ type PageInfo struct {
 	Page   int         `json:"page"`
 	Limit  int         `json:"limit"`
 	Offset int         `json:"offset"`
-	Sort   []SortField `json:"sort"`
+	Sort       []SortField `json:"sort"`
+	Cursor     string      `json:"cursor,omitempty"`
+	HasMore    bool        `json:"has_more,omitempty"`
+	NextCursor string      `json:"next_cursor,omitempty"`
 }
 
 // NewPageInfo creates a new PageInfo.
