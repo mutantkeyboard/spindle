@@ -81,6 +81,15 @@ func (p *PageInfo) PreviousPageURL(baseURL string) string {
 	return ""
 }
 
+// NextCursorURL returns the URL for the next cursor page.
+// Returns empty string if HasMore is false.
+func (p *PageInfo) NextCursorURL(baseURL string) string {
+	if !p.HasMore {
+		return ""
+	}
+	return fmt.Sprintf("%s?cursor=%s&limit=%d", baseURL, p.NextCursor, p.Limit)
+}
+
 // CursorValues decodes the opaque cursor into a key-value map.
 // Returns nil if cursor is empty or invalid.
 func (p *PageInfo) CursorValues() map[string]any {

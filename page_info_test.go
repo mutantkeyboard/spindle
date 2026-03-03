@@ -1,6 +1,9 @@
 package spindle
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestSortOrderFromString(t *testing.T) {
 	t.Parallel()
@@ -211,6 +214,31 @@ func TestCursorValuesInvalidJSON(t *testing.T) {
 	if vals := p.CursorValues(); vals != nil {
 		t.Errorf("CursorValues() = %v, want nil for invalid JSON", vals)
 	}
+}
+
+func TestNextCursorURL(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with HasMore", func(t *testing.T) {
+		p := &PageInfo{Limit: 20}
+		p.SetNextCursor(map[string]any{"id": float64(42)})
+
+		url := p.NextCursorURL("https://example.com/users")
+
+		expected := fmt.Sprintf("https://example.com/users?cursor=%s&limit=20", p.NextCursor)
+		if url != expected {
+			t.Errorf("NextCursorURL() = %q, want %q", url, expected)
+		}
+	})
+
+	t.Run("without HasMore", func(t *testing.T) {
+		p := &PageInfo{Limit: 20}
+
+		url := p.NextCursorURL("https://example.com/users")
+		if url != "" {
+			t.Errorf("NextCursorURL() = %q, want empty string when HasMore is false", url)
+		}
+	})
 }
 
 func TestSetNextCursorChainable(t *testing.T) {
