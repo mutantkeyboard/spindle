@@ -1,6 +1,7 @@
 package spindle
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http/httptest"
 	"reflect"
@@ -637,6 +638,336 @@ func BenchmarkPaginateMiddlewareWithCustomConfig(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		req := httptest.NewRequest("GET", "/?p=3&l=25&s=name,-id", nil)
+		_, err := app.Test(req, fiber.TestConfig{Timeout: 0})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+type CursorResponse struct {
+	Cursor     string      `json:"cursor"`
+	Limit      int         `json:"limit"`
+	HasMore    bool        `json:"has_more"`
+	NextCursor string      `json:"next_cursor"`
+	Sort       []SortField `json:"sort"`
+}
+
+func Test_PaginateWithCursor(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		DefaultSort: "id",
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(CursorResponse{
+			Cursor: pageInfo.Cursor,
+			Limit:  pageInfo.Limit,
+			Sort:   pageInfo.Sort,
+		})
+	})
+
+	// Encode a valid cursor: {"id": 42}
+	cursorJSON := `{"id":42}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/?cursor="+cursor+"&limit=20", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var result CursorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Cursor != cursor {
+		t.Errorf("Cursor = %q, want %q", result.Cursor, cursor)
+	}
+	if result.Limit != 20 {
+		t.Errorf("Limit = %d, want 20", result.Limit)
+	}
+}
+
+func Test_PaginateCursorPriorityOverPage(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New())
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(pageInfo)
+	})
+
+	cursorJSON := `{"id":42}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	// Both cursor and page present — cursor should win
+	resp, err := app.Test(httptest.NewRequest("GET", "/?cursor="+cursor+"&page=5&limit=10", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var result PageInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Cursor != cursor {
+		t.Errorf("Cursor = %q, want %q", result.Cursor, cursor)
+	}
+	// Page should be 0 since cursor mode ignores it
+	if result.Page != 0 {
+		t.Errorf("Page = %d, want 0 in cursor mode", result.Page)
+	}
+}
+
+func Test_PaginateEmptyCursorIsFirstPage(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New())
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(pageInfo)
+	})
+
+	// Empty cursor = first page, should not error
+	resp, err := app.Test(httptest.NewRequest("GET", "/?cursor=&limit=10", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200 for empty cursor", resp.StatusCode)
+	}
+
+	var result PageInfo
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Cursor != "" {
+		t.Errorf("Cursor = %q, want empty string", result.Cursor)
+	}
+}
+
+func Test_PaginateInvalidCursorReturns400(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New())
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, _ := FromContext(c)
+		return c.JSON(pageInfo)
+	})
+
+	testCases := []struct {
+		name   string
+		cursor string
+	}{
+		{"Invalid base64", "not-valid!!!"},
+		{"Valid base64 but invalid JSON", base64.RawURLEncoding.EncodeToString([]byte("not-json"))},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := app.Test(httptest.NewRequest("GET", "/?cursor="+tc.cursor, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 400 {
+				t.Errorf("status = %d, want 400 for %s", resp.StatusCode, tc.name)
+			}
+		})
+	}
+}
+
+func Test_PaginateCursorWithSort(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		SortKey:      "sort",
+		DefaultSort:  "id",
+		AllowedSorts: []string{"id", "name"},
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(CursorResponse{
+			Cursor: pageInfo.Cursor,
+			Sort:   pageInfo.Sort,
+		})
+	})
+
+	cursorJSON := `{"id":42}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/?cursor="+cursor+"&sort=name,-id", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var result CursorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+
+	expectedSort := []SortField{{Field: "name", Order: ASC}, {Field: "id", Order: DESC}}
+	if !reflect.DeepEqual(result.Sort, expectedSort) {
+		t.Errorf("Sort = %v, want %v", result.Sort, expectedSort)
+	}
+}
+
+func Test_PaginateCursorWithCustomKey(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		CursorKey: "after",
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(CursorResponse{
+			Cursor: pageInfo.Cursor,
+			Limit:  pageInfo.Limit,
+		})
+	})
+
+	cursorJSON := `{"id":1}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/?after="+cursor, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var result CursorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Cursor != cursor {
+		t.Errorf("Cursor = %q, want %q", result.Cursor, cursor)
+	}
+}
+
+func Test_PaginateCursorWithParamAlias(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		CursorParam: "starting_after",
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(CursorResponse{
+			Cursor: pageInfo.Cursor,
+		})
+	})
+
+	cursorJSON := `{"id":1}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	// Use the alias param name
+	resp, err := app.Test(httptest.NewRequest("GET", "/?starting_after="+cursor, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var result CursorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Cursor != cursor {
+		t.Errorf("Cursor = %q, want %q", result.Cursor, cursor)
+	}
+}
+
+func Test_PaginateNoCursorFallsBackToPageMode(t *testing.T) {
+	t.Parallel()
+	app := fiber.New()
+	app.Use(New(Config{
+		DefaultSort: "id",
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, ok := FromContext(c)
+		if !ok {
+			return fiber.ErrBadRequest
+		}
+		return c.JSON(Response{
+			Page:  pageInfo.Page,
+			Limit: pageInfo.Limit,
+			Start: pageInfo.Start(),
+		})
+	})
+
+	// No cursor param — should behave exactly as before
+	resp, err := app.Test(httptest.NewRequest("GET", "/?page=3&limit=15", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var result Response
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Page != 3 {
+		t.Errorf("Page = %d, want 3", result.Page)
+	}
+	if result.Limit != 15 {
+		t.Errorf("Limit = %d, want 15", result.Limit)
+	}
+	if result.Start != 30 {
+		t.Errorf("Start = %d, want 30", result.Start)
+	}
+}
+
+func BenchmarkPaginateCursorMiddleware(b *testing.B) {
+	app := fiber.New()
+	app.Use(New(Config{
+		SortKey:      "sort",
+		DefaultSort:  "id",
+		AllowedSorts: []string{"id", "name", "date"},
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, _ := FromContext(c)
+		return c.JSON(pageInfo)
+	})
+
+	cursorJSON := `{"id":42,"created_at":"2026-01-01T00:00:00Z"}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/?cursor="+cursor+"&limit=20&sort=name,-id", nil)
 		_, err := app.Test(req, fiber.TestConfig{Timeout: 0})
 		if err != nil {
 			b.Fatal(err)

@@ -27,6 +27,12 @@ type Config struct {
 
 	// AllowedSorts is the list of allowed sort fields.
 	AllowedSorts []string
+
+	// CursorKey is the query string key for cursor-based pagination.
+	CursorKey string
+
+	// CursorParam is an optional alias for the cursor query key.
+	CursorParam string
 }
 
 // ConfigDefault is the default config.
@@ -36,6 +42,7 @@ var ConfigDefault = Config{
 	DefaultPage:  1,
 	LimitKey:     "limit",
 	DefaultLimit: 10,
+	CursorKey:    "cursor",
 }
 
 func configDefault(config ...Config) Config {
@@ -59,6 +66,9 @@ func configDefault(config ...Config) Config {
 	}
 	if cfg.DefaultPage < 1 {
 		cfg.DefaultPage = ConfigDefault.DefaultPage
+	}
+	if cfg.CursorKey == "" {
+		cfg.CursorKey = ConfigDefault.CursorKey
 	}
 
 	return cfg

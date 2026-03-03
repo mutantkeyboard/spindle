@@ -1,6 +1,10 @@
 package spindle
 
-import "fmt"
+import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+)
 
 // SortOrder represents sort order.
 type SortOrder string
@@ -30,10 +34,13 @@ func SortOrderFromString(s string) SortOrder {
 
 // PageInfo contains pagination information.
 type PageInfo struct {
-	Page   int         `json:"page"`
-	Limit  int         `json:"limit"`
-	Offset int         `json:"offset"`
-	Sort   []SortField `json:"sort"`
+	Page       int         `json:"page"`
+	Limit      int         `json:"limit"`
+	Offset     int         `json:"offset"`
+	Sort       []SortField `json:"sort"`
+	Cursor     string      `json:"cursor,omitempty"`
+	HasMore    bool        `json:"has_more,omitempty"`
+	NextCursor string      `json:"next_cursor,omitempty"`
 }
 
 // NewPageInfo creates a new PageInfo.
@@ -72,4 +79,47 @@ func (p *PageInfo) PreviousPageURL(baseURL string) string {
 		return fmt.Sprintf("%s?page=%d&limit=%d", baseURL, p.Page-1, p.Limit)
 	}
 	return ""
+}
+
+// NextCursorURL returns the URL for the next cursor page.
+// Returns empty string if HasMore is false.
+func (p *PageInfo) NextCursorURL(baseURL string) string {
+	if !p.HasMore {
+		return ""
+	}
+	return fmt.Sprintf("%s?cursor=%s&limit=%d", baseURL, p.NextCursor, p.Limit)
+}
+
+// CursorValues decodes the opaque cursor into a key-value map.
+// Returns nil if cursor is empty or invalid.
+func (p *PageInfo) CursorValues() map[string]any {
+	if p.Cursor == "" {
+		return nil
+	}
+
+	data, err := base64.RawURLEncoding.DecodeString(p.Cursor)
+	if err != nil {
+		return nil
+	}
+
+	var values map[string]any
+	if err := json.Unmarshal(data, &values); err != nil {
+		return nil
+	}
+
+	return values
+}
+
+// SetNextCursor encodes a key-value map into an opaque cursor token
+// and sets both NextCursor and HasMore on the PageInfo. Chainable.
+func (p *PageInfo) SetNextCursor(values map[string]any) *PageInfo {
+	data, err := json.Marshal(values)
+	if err != nil {
+		return p
+	}
+
+	p.NextCursor = base64.RawURLEncoding.EncodeToString(data)
+	p.HasMore = true
+
+	return p
 }
