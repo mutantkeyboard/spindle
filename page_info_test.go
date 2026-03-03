@@ -2,6 +2,7 @@ package spindle
 
 import (
 	"fmt"
+	"math"
 	"testing"
 )
 
@@ -213,6 +214,23 @@ func TestCursorValuesInvalidJSON(t *testing.T) {
 	p := &PageInfo{Cursor: "bm90LWpzb24"}
 	if vals := p.CursorValues(); vals != nil {
 		t.Errorf("CursorValues() = %v, want nil for invalid JSON", vals)
+	}
+}
+
+func TestSetNextCursorMarshalError(t *testing.T) {
+	t.Parallel()
+
+	p := &PageInfo{Limit: 10}
+	result := p.SetNextCursor(map[string]any{"bad": math.NaN()})
+
+	if result != p {
+		t.Error("SetNextCursor should return the same PageInfo on error")
+	}
+	if p.HasMore {
+		t.Error("HasMore should remain false on marshal error")
+	}
+	if p.NextCursor != "" {
+		t.Errorf("NextCursor = %q, want empty on marshal error", p.NextCursor)
 	}
 }
 
