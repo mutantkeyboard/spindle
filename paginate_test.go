@@ -947,3 +947,30 @@ func Test_PaginateNoCursorFallsBackToPageMode(t *testing.T) {
 		t.Errorf("Start = %d, want 30", result.Start)
 	}
 }
+
+func BenchmarkPaginateCursorMiddleware(b *testing.B) {
+	app := fiber.New()
+	app.Use(New(Config{
+		SortKey:      "sort",
+		DefaultSort:  "id",
+		AllowedSorts: []string{"id", "name", "date"},
+	}))
+
+	app.Get("/", func(c fiber.Ctx) error {
+		pageInfo, _ := FromContext(c)
+		return c.JSON(pageInfo)
+	})
+
+	cursorJSON := `{"id":42,"created_at":"2026-01-01T00:00:00Z"}`
+	cursor := base64.RawURLEncoding.EncodeToString([]byte(cursorJSON))
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/?cursor="+cursor+"&limit=20&sort=name,-id", nil)
+		_, err := app.Test(req, fiber.TestConfig{Timeout: 0})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
