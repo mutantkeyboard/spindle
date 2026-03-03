@@ -43,6 +43,30 @@ func TestConfigOverride(t *testing.T) {
 	}
 }
 
+func TestConfigDefaultCursorKey(t *testing.T) {
+	t.Parallel()
+
+	cfg := configDefault()
+	if cfg.CursorKey != "cursor" {
+		t.Errorf("CursorKey = %q, want %q", cfg.CursorKey, "cursor")
+	}
+}
+
+func TestConfigOverrideCursorKey(t *testing.T) {
+	t.Parallel()
+
+	cfg := configDefault(Config{
+		CursorKey:   "after",
+		CursorParam: "starting_after",
+	})
+	if cfg.CursorKey != "after" {
+		t.Errorf("CursorKey = %q, want %q", cfg.CursorKey, "after")
+	}
+	if cfg.CursorParam != "starting_after" {
+		t.Errorf("CursorParam = %q, want %q", cfg.CursorParam, "starting_after")
+	}
+}
+
 func TestConfigNegativeDefaults(t *testing.T) {
 	t.Parallel()
 
