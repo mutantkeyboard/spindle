@@ -68,6 +68,50 @@ Request: `GET /users?page=1&limit=10&sort=name,-created_at`
 
 Sort fields are comma-separated. Prefix with `-` for descending order.
 
+### Cursor Pagination
+
+For infinite scroll and keyset pagination:
+
+```go
+app.Use(spindle.New(spindle.Config{
+    CursorKey: "cursor", // default
+}))
+
+app.Get("/users", func(c fiber.Ctx) error {
+    pageInfo, ok := spindle.FromContext(c)
+    if !ok {
+        return fiber.ErrBadRequest
+    }
+
+    query := db.Model(&User{}).OrderBy("id ASC").Limit(pageInfo.Limit + 1)
+
+    if vals := pageInfo.CursorValues(); vals != nil {
+        query = query.Where("id > ?", vals["id"])
+    }
+
+    var users []User
+    query.Find(&users)
+
+    hasMore := len(users) > pageInfo.Limit
+    if hasMore {
+        users = users[:pageInfo.Limit]
+        last := users[len(users)-1]
+        pageInfo.SetNextCursor(map[string]any{"id": last.ID})
+    }
+
+    return c.JSON(fiber.Map{
+        "data":        users,
+        "has_more":    pageInfo.HasMore,
+        "next_cursor": pageInfo.NextCursor,
+    })
+})
+```
+
+First request: `GET /users?limit=20`
+Next request: `GET /users?cursor=<next_cursor>&limit=20`
+
+Cursor tokens are opaque base64-encoded values. Invalid cursors return 400.
+
 ### Custom Config
 
 ```go
@@ -96,6 +140,8 @@ app.Use(spindle.New(spindle.Config{
 | SortKey | `string` | Query key for sort | `""` |
 | DefaultSort | `string` | Default sort field | `"id"` |
 | AllowedSorts | `[]string` | Allowed sort field names | `[]` |
+| CursorKey | `string` | Query key for cursor token | `"cursor"` |
+| CursorParam | `string` | Optional alias for cursor key | `""` |
 
 ## PageInfo
 
@@ -103,10 +149,13 @@ Retrieved via `spindle.FromContext(c)`:
 
 ```go
 type PageInfo struct {
-    Page   int         // Current page number
-    Limit  int         // Items per page (capped at 100)
-    Offset int         // Direct offset
-    Sort   []SortField // Sort fields with direction
+    Page       int         // Current page number
+    Limit      int         // Items per page (capped at 100)
+    Offset     int         // Direct offset
+    Sort       []SortField // Sort fields with direction
+    Cursor     string      // Cursor token (empty if not in cursor mode)
+    HasMore    bool        // True if more results exist (set by handler)
+    NextCursor string      // Opaque cursor for next page (set by handler)
 }
 ```
 
@@ -116,6 +165,9 @@ type PageInfo struct {
 - `SortBy(field string, order SortOrder) *PageInfo` - Adds a sort field. Chainable.
 - `NextPageURL(baseURL string) string` - Returns the URL for the next page.
 - `PreviousPageURL(baseURL string) string` - Returns the URL for the previous page. Empty string if on page 1.
+- `CursorValues() map[string]any` - Decodes the cursor into key-value pairs. Returns nil if empty or invalid.
+- `SetNextCursor(values map[string]any) *PageInfo` - Encodes values into an opaque cursor and sets HasMore. Chainable.
+- `NextCursorURL(baseURL string) string` - Returns the URL for the next cursor page. Empty string if HasMore is false.
 
 ## Safety
 
@@ -123,6 +175,7 @@ type PageInfo struct {
 - Page values below 1 are reset to 1
 - Negative offsets are reset to 0
 - Sort fields are validated against `AllowedSorts`
+- Invalid cursor tokens return 400 Bad Request
 
 ## Development
 
