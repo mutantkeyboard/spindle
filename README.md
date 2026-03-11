@@ -1,5 +1,8 @@
 # Spindle
 
+# IMPORTANT - Spindle has been fully integrated into the Fiber itelf as an official Paginate middleware, and as of March 11, 2026, this repo is archived
+
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/mutantkeyboard/spindle.svg)](https://pkg.go.dev/github.com/mutantkeyboard/spindle)
 [![CI](https://github.com/mutantkeyboard/spindle/actions/workflows/ci.yml/badge.svg)](https://github.com/mutantkeyboard/spindle/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/mutantkeyboard/spindle/branch/main/graph/badge.svg)](https://codecov.io/gh/mutantkeyboard/spindle)
